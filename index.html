@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧴 B5双抗面霜 · 评论数据分析看板</title>
+<script src="echarts.min.js"></script>
+<script src="echarts-wordcloud.min.js"></script>
+<style>
+  :root {
+    --primary: #6d5ef7;
+    --primary2: #8b5cf6;
+    --purple: #a855f7;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --green-bg: #ecfdf5;
+    --amber: #f59e0b;
+    --amber-bg: #fffbeb;
+    --red: #ef4444;
+    --red-bg: #fef2f2;
+    --gray: #94a3b8;
+    --gray-bg: #f1f5f9;
+    --text: #1e293b;
+    --text-sub: #64748b;
+    --border: #e2e8f0;
+    --card: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    background: linear-gradient(160deg, #f6f7ff 0%, #f3f0ff 45%, #f8f5ff 100%);
+    color: var(--text); min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(120deg, #4338ca 0%, #6d5ef7 40%, #8b5cf6 70%, #a855f7 100%);
+    color: #fff; padding: 26px 36px; display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 12px;
+    box-shadow: 0 4px 24px rgba(109, 94, 247, .35);
+  }
+  .header h1 { font-size: 24px; font-weight: 700; letter-spacing: .5px; text-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .header .sub { font-size: 13px; opacity: .9; margin-top: 5px; }
+  .header .badge {
+    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    border-radius: 20px; padding: 7px 18px; font-size: 13px; backdrop-filter: blur(4px);
+  }
+  .tabs {
+    display: flex; gap: 6px; padding: 0 32px; position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.85); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 15px 20px; font-size: 14.5px; cursor: pointer; color: var(--text-sub);
+    border-bottom: 3px solid transparent; user-select: none; transition: color .2s;
+  }
+  .tab:hover { color: var(--primary); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .page { display: none; padding: 26px 36px 40px; max-width: 1440px; margin: 0 auto; }
+  .page.active { display: block; animation: fadeIn .35s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .kpi-card {
+    background: var(--card); border-radius: 14px; padding: 16px 18px;
+    box-shadow: 0 2px 10px rgba(109,94,247,.08); border: 1px solid var(--border);
+    border-top: 3px solid var(--primary); position: relative; overflow: hidden;
+  }
+  .kpi-card::after {
+    content: ""; position: absolute; right: -20px; top: -20px; width: 70px; height: 70px;
+    border-radius: 50%; background: linear-gradient(135deg, rgba(109,94,247,.12), rgba(168,85,247,.06));
+  }
+  .kpi-card .label { font-size: 12.5px; color: var(--text-sub); margin-bottom: 7px; }
+  .kpi-card .value { font-size: 28px; font-weight: 700; background: linear-gradient(120deg, var(--primary), var(--purple)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .kpi-card .value small { font-size: 13px; font-weight: 400; }
+  .kpi-card .hint { font-size: 11.5px; color: var(--text-sub); margin-top: 5px; }
+  .kpi-card.good { border-top-color: var(--green); }
+  .kpi-card.good .value { background: linear-gradient(120deg, #16a34a, #22c55e); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .kpi-card.warn { border-top-color: var(--amber); }
+  .kpi-card.warn .value { background: linear-gradient(120deg, #d97706, #f59e0b); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .kpi-card.bad { border-top-color: var(--red); }
+  .kpi-card.bad .value { background: linear-gradient(120deg, #dc2626, #ef4444); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .card {
+    background: var(--card); border-radius: 14px; padding: 18px 20px;
+    box-shadow: 0 2px 10px rgba(109,94,247,.07); border: 1px solid var(--border);
+  }
+  .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card h3::before { content: ""; width: 4px; height: 16px; border-radius: 2px; display: inline-block;
+    background: linear-gradient(180deg, var(--primary), var(--purple)); }
+  .chart { width: 100%; height: 310px; }
+  .chart.tall { height: 360px; }
+  .chart.short { height: 250px; }
+  .insight-box {
+    background: linear-gradient(120deg, #eef2ff, #f5f3ff); border-left: 4px solid var(--primary);
+    border-radius: 10px; padding: 15px 20px; margin-bottom: 16px; font-size: 13.5px; line-height: 2;
+  }
+  .insight-box strong { color: var(--primary); }
+  .table-wrap { overflow-x: auto; }
+  table.ov-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ov-table th, .ov-table td { padding: 9px 11px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ov-table th { background: linear-gradient(120deg, #f5f3ff, #eef2ff); color: #4338ca; font-weight: 600; white-space: nowrap; }
+  .ov-table td.sample { color: var(--text-sub); font-size: 12px; line-height: 1.6; max-width: 320px; }
+  .ov-table tr:hover td { background: #faf9ff; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge.good { background: var(--green-bg); color: #16a34a; }
+  .badge.mid { background: var(--amber-bg); color: #d97706; }
+  .badge.bad { background: var(--red-bg); color: #dc2626; }
+  .badge.info { background: #eef2ff; color: var(--primary); }
+  .badge.gray { background: var(--gray-bg); color: var(--gray); }
+  .review-list { display: flex; flex-direction: column; gap: 9px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+  .review-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.7; background: #faf9ff; }
+  .review-item .meta { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .footer { text-align: center; color: var(--text-sub); font-size: 12px; padding: 22px; }
+  @media (max-width: 1000px) { .grid2, .grid3 { grid-template-columns: 1fr; } .page { padding: 16px; } .tabs { padding: 0 12px; overflow-x: auto; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🧴 B5双抗面霜 · 评论数据分析看板</h1>
+    <div class="sub"><a href="https://detail.tmall.com/item.htm?id=973946995647" target="_blank" style="color:#fff;text-decoration:underline;opacity:.95">🔗 商品链接：detail.tmall.com/item.htm?id=973946995647</a></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchPage('overview', this)">📊 总览</div>
+  <div class="tab" onclick="switchPage('sentiment', this)">💬 情感分析</div>
+  <div class="tab" onclick="switchPage('sku', this)">📦 商品维度</div>
+  <div class="tab" onclick="switchPage('time', this)">🕐 时间维度</div>
+  <div class="tab" onclick="switchPage('portrait', this)">👤 用户画像</div>
+</div>
+
+<!-- ================= 页1 总览 ================= -->
+<div class="page active" id="page-overview">
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="label">总评论数</div><div class="value" id="kpi-total">-</div><div class="hint">2025-09 ~ 2026-09</div></div>
+    <div class="kpi-card good"><div class="label">真实好评率</div><div class="value" id="kpi-good-rate">-<small>%</small></div><div class="hint">仅统计真实内容评论</div></div>
+    <div class="kpi-card"><div class="label">平台模板好评</div><div class="value" id="kpi-tpl">-<small>条</small></div><div class="hint">占 <span id="kpi-tpl-rate">-</span>%，无文字内容</div></div>
+    <div class="kpi-card warn"><div class="label">中评</div><div class="value" id="kpi-mid">-<small>条</small></div><div class="hint">保留/待观察型意见</div></div>
+    <div class="kpi-card bad"><div class="label">差评</div><div class="value" id="kpi-bad">-<small>条</small></div><div class="hint">需重点关注</div></div>
+    <div class="kpi-card"><div class="label">复购信号</div><div class="value" id="kpi-rep">-<small>条</small></div><div class="hint">评论提到回购/复购/续购</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><h3>情感结构分布（含模板好评对比）</h3><div id="ov-pie" class="chart" data-chart="ov-pie"></div></div>
+    <div class="card"><h3>月度评论量 &amp; 真实好评率走势（2025-09 ~ 2026-09）</h3><div id="ov-trend" class="chart tall" data-chart="ov-trend"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><h3>好评点 TOP（真实好评提到最多的方面）</h3><div id="ov-good-theme" class="chart" data-chart="ov-good-theme"></div></div>
+    <div class="card"><h3>差评归因 TOP（中差评"坏在哪"）</h3><div id="ov-bad-reason" class="chart" data-chart="ov-bad-reason"></div></div>
+  </div>
+
+  <div class="insight-box" id="ov-insights"></div>
+</div>
+
+<!-- ================= 页2 情感分析 ================= -->
+<div class="page" id="page-sentiment">
+  <div class="grid2">
+    <div class="card"><h3>真实好评词云（高频关键词）</h3><div id="sn-wc-good" class="chart" data-chart="sn-wc-good"></div></div>
+    <div class="card"><h3>中差评词云（问题关键词）</h3><div id="sn-wc-bad" class="chart" data-chart="sn-wc-bad"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>好评点明细（好评里夸什么）</h3><div class="table-wrap" id="sn-good-table"></div></div>
+    <div class="card"><h3>差评点明细（中差评里骂什么）</h3><div class="table-wrap" id="sn-bad-table"></div></div>
+  </div>
+  <div class="card"><h3>矛盾点发现：一条评论里"某方面好、某方面坏"（共现）</h3>
+    <div id="sn-cooccur"></div>
+  </div>
+</div>
+
+<!-- ================= 页3 商品维度 ================= -->
+<div class="page" id="page-sku">
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="label">规格种类（归一化）</div><div class="value" id="sku-k-spec">-</div></div>
+    <div class="kpi-card"><div class="label">最热规格</div><div class="value" id="sku-k-top">-</div></div>
+    <div class="kpi-card good"><div class="label">口碑最佳规格</div><div class="value" id="sku-k-best">-</div></div>
+    <div class="kpi-card bad"><div class="label">差评最集中规格</div><div class="value" id="sku-k-worst">-</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>SKU 规格评论量分布</h3><div id="sku-dist" class="chart" data-chart="sku-dist"></div></div>
+    <div class="card"><h3>SKU × 情感热力图</h3><div id="sku-heat" class="chart tall" data-chart="sku-heat"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>各规格口碑排行（真实好评率 / 差评数）</h3><div class="table-wrap" id="sku-rate-table"></div></div>
+    <div class="card"><h3>SKU 卖点后缀曝光 TOP（引流词）</h3><div id="sku-promo" class="chart" data-chart="sku-promo"></div></div>
+  </div>
+</div>
+
+<!-- ================= 页4 时间维度 ================= -->
+<div class="page" id="page-time">
+  <div class="grid2">
+    <div class="card"><h3>月度评论构成堆叠（模板好评 / 真实好评 / 中评 / 差评）</h3><div id="tm-stack" class="chart tall" data-chart="tm-stack"></div></div>
+    <div class="card"><h3>月度真实好评率（%，虚线为区间平均）</h3><div id="tm-rate" class="chart tall" data-chart="tm-rate"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>一周内评价分布（评价活跃日）</h3><div id="tm-weekday" class="chart" data-chart="tm-weekday"></div></div>
+    <div class="card"><h3>复购信号月度趋势</h3><div id="tm-rep" class="chart" data-chart="tm-rep"></div></div>
+  </div>
+  <div class="insight-box" id="tm-insights"></div>
+</div>
+
+<!-- ================= 页5 用户画像 ================= -->
+<div class="page" id="page-portrait">
+  <div class="grid3">
+    <div class="card"><h3>规格偏好画像（按购买规格）</h3><div id="pt-spec" class="chart short" data-chart="pt-spec"></div></div>
+    <div class="card"><h3>购买场景画像（文本关键词）</h3><div id="pt-scene" class="chart short" data-chart="pt-scene"></div></div>
+    <div class="card"><h3>关注点分群（用户最在意什么）</h3><div id="pt-focus" class="chart short" data-chart="pt-focus"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>购买场景代表评论</h3><div id="pt-scene-samples"></div></div>
+    <div class="card"><h3>复购信号代表评论（口碑价值用户）</h3><div id="pt-rep-samples"></div></div>
+  </div>
+  <div class="insight-box" id="pt-insights"></div>
+</div>
+
+<div class="footer"></div>
+
+<script>
+const DATA = {"meta": {"source": "商品评论数据.xlsx", "product": "B5双抗面霜", "link": "detail.tmall.com/item.htm?id=973946995647", "link_url": "https://detail.tmall.com/item.htm?id=973946995647", "total": 4721, "valid": 1524}, "kpi": {"total": 4721, "template": 3197, "template_rate": 67.7, "good": 1346, "mid": 124, "bad": 54, "real_total": 1524, "real_good_rate": 88.3, "overall_good_rate": 96.2, "real_rate": 88.3, "repurchase": 82, "avg_len": 42.9}, "sentiment_pie": [{"name": "真实好评", "value": 1346}, {"name": "中评", "value": 124}, {"name": "差评", "value": 54}, {"name": "模板好评(无内容)", "value": 3197}], "good_themes": [{"theme": "保湿滋润", "count": 865, "rate": 64.3, "samples": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "很好用。Due to different in weather, Nantong is dryer than Singapore. This cream helps to moisturise my skin and my skin won", "这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻"]}, {"theme": "肤感质地", "count": 684, "rate": 50.8, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "在踩了那么多雷后，现在终于找到一款合适我的面霜了不得不说，这面霜保湿效果很明显，像我平时健完身后脸上总是干燥紧绷，但自从抹了它后，就算脸上出汗还是水润润的，真正做到了深层补水，并且抹上去吸收快，不油腻，运动起来无负担，虽然价格相对较高，但是", "博主安利的这款男士面霜保湿补水效果实在是太好了，它是那种轻薄质地，用起来不油腻很舒服，上脸后吸收也很快，用完可以直接倒头就睡不怕沾枕头，就算熬夜了第二天起床皮肤也是水嫩水嫩的， 前两天朋友还问我咋天天往外跑脸上都不会干燥起皮呢hhh~就是价"]}, {"theme": "功效改善", "count": 398, "rate": 29.6, "samples": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "博主安利的这款男士面霜保湿补水效果实在是太好了，它是那种轻薄质地，用起来不油腻很舒服，上脸后吸收也很快，用完可以直接倒头就睡不怕沾枕头，就算熬夜了第二天起床皮肤也是水嫩水嫩的， 前两天朋友还问我咋天天往外跑脸上都不会干燥起皮呢hhh~就是价"]}, {"theme": "价格实惠", "count": 203, "rate": 15.1, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "在踩了那么多雷后，现在终于找到一款合适我的面霜了不得不说，这面霜保湿效果很明显，像我平时健完身后脸上总是干燥紧绷，但自从抹了它后，就算脸上出汗还是水润润的，真正做到了深层补水，并且抹上去吸收快，不油腻，运动起来无负担，虽然价格相对较高，但是", "它的质地很清爽，涂抹开后瞬间哑光，完全没有黏腻感，后续上妆或者出门都很舒服。用了一段时间，能明显感觉到皮肤状态稳定了不少，抗氧抗老的效果也在线，熬夜后的暗沉都被改善了。60g的容量很实在，性价比超高，真心推荐给各位男士同胞，控油抗老选它准没"]}, {"theme": "物流发货", "count": 163, "rate": 12.1, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "博主安利的这款男士面霜保湿补水效果实在是太好了，它是那种轻薄质地，用起来不油腻很舒服，上脸后吸收也很快，用完可以直接倒头就睡不怕沾枕头，就算熬夜了第二天起床皮肤也是水嫩水嫩的， 前两天朋友还问我咋天天往外跑脸上都不会干燥起皮呢hhh~就是价", "刚收到货，塑料薄膜里面出现大量水渍一样的。请问这是什么产品质量？第一时间联系客服，客服让我打开包装，还好我没打开。客服说是快递的问题，可是快递运输中也不至于在包装里面啊。给我的解决方案补发一瓶，可是不需要。如实把收到货的情况放在评论区。请自"]}, {"theme": "气味好闻", "count": 121, "rate": 9.0, "samples": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "给这款男士面霜点个赞，这款质地真的超级清爽，抹开瞬间吸收，完全不会黏腻，肤感很舒服。控油效果也挺明显的，以前到中午就一脸油，现在能撑一天，脸还是干爽的。味道是淡淡的清香，不夸张，很适合男士。保湿力也够，用了之后皮肤滑溜了。整体非常满意，会回", "男朋友是那种很不喜欢涂东西的性格，没想到的这个面霜居然超喜欢~他说涂在脸上水水润润的，现在每天吹空调也不会感觉干燥啦，而且是闻起来很高级的香味，淡淡的，闻起来也很清爽舒服~现在每天都不用提醒，自己涂不停呀~"]}, {"theme": "温和不刺激", "count": 100, "rate": 7.4, "samples": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "这款面霜质地轻盈，像酸奶般一抹即化，吸收快且不油腻，润而不油。保湿力持久，第二天肌肤仍水润饱满。泛红缓解，肤质更稳定健康。包装简约有质感。真心推荐给需要长效保湿、舒缓维稳的干皮、混干皮或敏感肌，是会无限回购的诚意之选！"]}, {"theme": "复购回购", "count": 78, "rate": 5.8, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "给这款男士面霜点个赞，这款质地真的超级清爽，抹开瞬间吸收，完全不会黏腻，肤感很舒服。控油效果也挺明显的，以前到中午就一脸油，现在能撑一天，脸还是干爽的。味道是淡淡的清香，不夸张，很适合男士。保湿力也够，用了之后皮肤滑溜了。整体非常满意，会回", "秋冬季节空气是越发干燥了，像我这样的旅行博主出门在外，选对一款好的保湿面霜就很有必要了!这款面霜是我回购最多的一款，不仅补水保湿非常在线，连修护力都是绝绝子，每次脸泛红拿它来急救，效果都立竿见影，现在出门行李箱里必有它!"]}, {"theme": "包装质感", "count": 59, "rate": 4.4, "samples": ["刚收到货，塑料薄膜里面出现大量水渍一样的。请问这是什么产品质量？第一时间联系客服，客服让我打开包装，还好我没打开。客服说是快递的问题，可是快递运输中也不至于在包装里面啊。给我的解决方案补发一瓶，可是不需要。如实把收到货的情况放在评论区。请自", "这款面霜质地轻盈，像酸奶般一抹即化，吸收快且不油腻，润而不油。保湿力持久，第二天肌肤仍水润饱满。泛红缓解，肤质更稳定健康。包装简约有质感。真心推荐给需要长效保湿、舒缓维稳的干皮、混干皮或敏感肌，是会无限回购的诚意之选！", "男朋友是那种很不喜欢涂东西的性格，没想到的这个面霜居然超喜欢~他说涂在脸上水水润润的，现在每天吹空调也不会感觉干燥啦，而且是闻起来很高级的香味，淡淡的，闻起来也很清爽舒服~现在每天都不用提醒，自己涂不停呀~"]}, {"theme": "客服服务", "count": 23, "rate": 1.7, "samples": ["刚收到货，塑料薄膜里面出现大量水渍一样的。请问这是什么产品质量？第一时间联系客服，客服让我打开包装，还好我没打开。客服说是快递的问题，可是快递运输中也不至于在包装里面啊。给我的解决方案补发一瓶，可是不需要。如实把收到货的情况放在评论区。请自", "很好吸收，润润的，买过几瓶了，这次又买了三瓶，很好用的，我觉得男士女士都好用，清淡的香味是我喜欢的，我也不找客服了，退一块钱麻烦，是会员的优惠活动，几袋洗发水发膜，还有面霜的小样，", "✨这款面霜真的太惊喜啦！质地清爽不黏腻，上脸很快就吸收了，保湿效果也超赞。👍原相机下皮肤依然清爽无油光，一整天都水水润润的。物流速度很快，服务态度也特别好，必须给五星好评！🌟"]}], "bad_reasons": [{"reason": "过敏刺激", "count": 26, "rate": 48.1, "samples": ["面霜很水，但是用了就过敏，直接肿了，因为开的原装加上距离快递处太远，和商家商量退款，先是不等买家说完要求就直接拒绝，然后是给各种理由，然后又开始答应了退部分又反悔！是买家不需要时间去点击相应的按键吗？是买家不能有一点点时间耽误，不能处理过敏", "质地像融化的奶冻，上脸一抹就吸收，完全不黏腻也不闷痘，秋冬涂完第二天皮肤还是水润润的，换季敏感期也没泛红刺痛。坚持用下来，脸蛋摸起来又软又嫩，暗沉黄气都淡了，素颜也透着自然光泽，成分温和无负担，干皮油皮都适配", "这面霜真是相见恨晚啊，用起来很温和，我敏感肌也不觉得刺激，而且质地很丝滑好吸收，一抹到脸上就化开了，一点都不黏腻。现在换季的时候用，保湿效果也特别好，女朋友还说味道很好闻，小贵但真好用"]}, {"reason": "肤感不佳", "count": 13, "rate": 24.1, "samples": ["这款男士面霜质地很轻薄，一抹就化开，上脸没有厚重闷肤的感觉，吸收很快，不会粘手粘枕头。淡淡的清香，不浓重。最近换季脸干起皮，坚持用几天干燥缓解不少，洗完脸涂一层，保湿维稳刚刚好。油皮用着也不会闷痘，男生护肤不用复杂，一瓶足够，性价比不错，推", "质地像融化的奶冻，上脸一抹就吸收，完全不黏腻也不闷痘，秋冬涂完第二天皮肤还是水润润的，换季敏感期也没泛红刺痛。坚持用下来，脸蛋摸起来又软又嫩，暗沉黄气都淡了，素颜也透着自然光泽，成分温和无负担，干皮油皮都适配", "这面霜真是相见恨晚啊，用起来很温和，我敏感肌也不觉得刺激，而且质地很丝滑好吸收，一抹到脸上就化开了，一点都不黏腻。现在换季的时候用，保湿效果也特别好，女朋友还说味道很好闻，小贵但真好用"]}, {"reason": "效果不佳", "count": 11, "rate": 20.4, "samples": ["秋冬换季皮肤差就用它!没用它之前脸总是干干的，起皮还贼严重，这款面霜质地轻薄，能够深层滋养肌肤缓解干燥起皮，每次涂上脸都感觉肌肤在大口大口喝水!", "第一次买这个牌子的货，这么多好评？东西还没用不知道效果怎么样，但是这个瓶子的包装是真的很陋，做工粗糙没有档次没有质感，希望里面东西用着可以", "不建议大家买，根本就没用，用了以后还是解决不了皮肤紧绷和脸脱皮的问题，而且自己脸过敏，给商家说了后，老板也不出解决方案，也不退货。"]}, {"reason": "闷痘闭口", "count": 7, "rate": 13.0, "samples": ["这款男士面霜质地很轻薄，一抹就化开，上脸没有厚重闷肤的感觉，吸收很快，不会粘手粘枕头。淡淡的清香，不浓重。最近换季脸干起皮，坚持用几天干燥缓解不少，洗完脸涂一层，保湿维稳刚刚好。油皮用着也不会闷痘，男生护肤不用复杂，一瓶足够，性价比不错，推", "质地像融化的奶冻，上脸一抹就吸收，完全不黏腻也不闷痘，秋冬涂完第二天皮肤还是水润润的，换季敏感期也没泛红刺痛。坚持用下来，脸蛋摸起来又软又嫩，暗沉黄气都淡了，素颜也透着自然光泽，成分温和无负担，干皮油皮都适配", "这款男士哑光面霜到手好大一瓶，质地清爽不油腻，上脸哑光不泛油光，很好推开，吸收挺快。保湿力度够用，不会闷痘，男生日常护肤用很合适。"]}, {"reason": "价格偏贵", "count": 5, "rate": 9.3, "samples": ["经常熬夜打游戏，时间久了皮肤暗沉了好多，实在是看不下去就入手了这面霜，到了之后我用了半个月，直接跟黄脸说拜拜了，现在白了之后看着也帅气了不少，价格有点贵也值了", "经常熬夜打游戏，时间久了皮肤暗沉好多，实在是看不下去就入手了这款面霜，到了之后用了半个月，直接跟黄脸说拜拜了，现在白了之后看着也帅了不少，价格有点贵也值了", "本敏感肌用着毫无压力，成分温和，保湿又舒缓，用了一段时间，皮肤过敏情况都改善了，果然成分好的产品都有点贵。"]}, {"reason": "客服售后", "count": 1, "rate": 1.9, "samples": ["说话的对敏感肌温和的，到手试用了一包那个5g的试用装涂脸一阵刺痛感，哎当时还问了客服，结果一用还是不行，湿润是挺滋润的，就是不能敏感肌使用，大家注意了"]}, {"reason": "气味不佳", "count": 1, "rate": 1.9, "samples": []}], "cooccur": [{"good": "肤感质地", "bad": "肤感不佳", "count": 420}, {"good": "保湿滋润", "bad": "肤感不佳", "count": 344}, {"good": "功效改善", "bad": "肤感不佳", "count": 152}, {"good": "保湿滋润", "bad": "过敏刺激", "count": 85}, {"good": "价格实惠", "bad": "肤感不佳", "count": 74}, {"good": "保湿滋润", "bad": "价格偏贵", "count": 67}, {"good": "价格实惠", "bad": "价格偏贵", "count": 63}, {"good": "温和不刺激", "bad": "过敏刺激", "count": 61}, {"good": "物流发货", "bad": "肤感不佳", "count": 59}, {"good": "肤感质地", "bad": "过敏刺激", "count": 55}, {"good": "功效改善", "bad": "过敏刺激", "count": 48}, {"good": "温和不刺激", "bad": "肤感不佳", "count": 48}, {"good": "气味好闻", "bad": "肤感不佳", "count": 45}, {"good": "肤感质地", "bad": "价格偏贵", "count": 44}, {"good": "功效改善", "bad": "价格偏贵", "count": 42}, {"good": "复购回购", "bad": "肤感不佳", "count": 35}, {"good": "肤感质地", "bad": "闷痘闭口", "count": 25}, {"good": "保湿滋润", "bad": "闷痘闭口", "count": 22}, {"good": "包装质感", "bad": "肤感不佳", "count": 19}, {"good": "功效改善", "bad": "闷痘闭口", "count": 15}, {"good": "物流发货", "bad": "价格偏贵", "count": 14}, {"good": "温和不刺激", "bad": "价格偏贵", "count": 13}, {"good": "物流发货", "bad": "过敏刺激", "count": 13}, {"good": "气味好闻", "bad": "气味不佳", "count": 12}, {"good": "气味好闻", "bad": "过敏刺激", "count": 11}, {"good": "客服服务", "bad": "客服售后", "count": 11}, {"good": "肤感质地", "bad": "气味不佳", "count": 7}, {"good": "价格实惠", "bad": "过敏刺激", "count": 7}, {"good": "价格实惠", "bad": "闷痘闭口", "count": 7}, {"good": "物流发货", "bad": "客服售后", "count": 6}, {"good": "气味好闻", "bad": "价格偏贵", "count": 5}, {"good": "包装质感", "bad": "过敏刺激", "count": 5}, {"good": "复购回购", "bad": "闷痘闭口", "count": 5}, {"good": "保湿滋润", "bad": "气味不佳", "count": 4}, {"good": "温和不刺激", "bad": "闷痘闭口", "count": 4}, {"good": "价格实惠", "bad": "客服售后", "count": 4}, {"good": "肤感质地", "bad": "客服售后", "count": 3}, {"good": "气味好闻", "bad": "闷痘闭口", "count": 3}, {"good": "物流发货", "bad": "闷痘闭口", "count": 3}, {"good": "包装质感", "bad": "价格偏贵", "count": 3}, {"good": "复购回购", "bad": "价格偏贵", "count": 3}, {"good": "客服服务", "bad": "过敏刺激", "count": 3}, {"good": "客服服务", "bad": "肤感不佳", "count": 3}, {"good": "保湿滋润", "bad": "客服售后", "count": 2}, {"good": "包装质感", "bad": "效果不佳", "count": 2}, {"good": "包装质感", "bad": "客服售后", "count": 2}, {"good": "包装质感", "bad": "气味不佳", "count": 2}, {"good": "保湿滋润", "bad": "效果不佳", "count": 1}, {"good": "肤感质地", "bad": "效果不佳", "count": 1}, {"good": "功效改善", "bad": "气味不佳", "count": 1}, {"good": "温和不刺激", "bad": "客服售后", "count": 1}, {"good": "温和不刺激", "bad": "气味不佳", "count": 1}, {"good": "气味好闻", "bad": "效果不佳", "count": 1}, {"good": "气味好闻", "bad": "客服售后", "count": 1}, {"good": "物流发货", "bad": "气味不佳", "count": 1}, {"good": "价格实惠", "bad": "气味不佳", "count": 1}, {"good": "复购回购", "bad": "过敏刺激", "count": 1}, {"good": "复购回购", "bad": "客服售后", "count": 1}, {"good": "复购回购", "bad": "气味不佳", "count": 1}], "monthly": [{"month": "2025-09", "count": 44, "good": 33, "mid": 1, "bad": 1, "template": 9, "real_rate": 94.3}, {"month": "2025-10", "count": 545, "good": 92, "mid": 13, "bad": 6, "template": 434, "real_rate": 82.9}, {"month": "2025-11", "count": 835, "good": 135, "mid": 21, "bad": 7, "template": 672, "real_rate": 82.8}, {"month": "2025-12", "count": 636, "good": 146, "mid": 21, "bad": 6, "template": 463, "real_rate": 84.4}, {"month": "2026-01", "count": 713, "good": 160, "mid": 19, "bad": 7, "template": 527, "real_rate": 86.0}, {"month": "2026-02", "count": 407, "good": 158, "mid": 8, "bad": 4, "template": 237, "real_rate": 92.9}, {"month": "2026-03", "count": 324, "good": 143, "mid": 11, "bad": 3, "template": 167, "real_rate": 91.1}, {"month": "2026-04", "count": 255, "good": 91, "mid": 7, "bad": 9, "template": 148, "real_rate": 85.0}, {"month": "2026-05", "count": 237, "good": 94, "mid": 6, "bad": 0, "template": 137, "real_rate": 94.0}, {"month": "2026-06", "count": 243, "good": 84, "mid": 4, "bad": 2, "template": 153, "real_rate": 93.3}, {"month": "2026-07", "count": 261, "good": 95, "mid": 7, "bad": 3, "template": 156, "real_rate": 90.5}, {"month": "2026-08", "count": 134, "good": 71, "mid": 3, "bad": 3, "template": 57, "real_rate": 92.2}, {"month": "2026-09", "count": 87, "good": 44, "mid": 3, "bad": 3, "template": 37, "real_rate": 88.0}], "weekday": [{"name": "周一", "value": 655}, {"name": "周二", "value": 688}, {"name": "周三", "value": 685}, {"name": "周四", "value": 639}, {"name": "周五", "value": 672}, {"name": "周六", "value": 657}, {"name": "周日", "value": 725}], "sku_dist": [{"name": "1瓶装", "value": 2871}, {"name": "2瓶装", "value": 1297}, {"name": "双件装(面霜+洗面奶)", "value": 152}, {"name": "3瓶装", "value": 144}, {"name": "两件套(面霜+爽肤水)", "value": 90}, {"name": "三件套(面霜+水+乳)", "value": 88}, {"name": "双支装(面霜+唇膏)", "value": 56}, {"name": "套装(霜+洁面+唇膏)", "value": 22}, {"name": "大容量单支装", "value": 1}], "sku_heat": {"skus": ["1瓶装", "2瓶装", "双件装(面霜+洗面奶)", "3瓶装", "两件套(面霜+爽肤水)", "其他规格(4类)"], "types": ["真实好评", "中评", "差评", "模板好评(无内容)"], "matrix": [[1131, 75, 45, 1620], [151, 35, 6, 1105], [13, 4, 0, 135], [19, 3, 0, 122], [10, 2, 1, 77], [22, 5, 2, 138]]}, "sku_rate": [{"sku": "1瓶装", "total": 2871, "real_rate": 90.4, "bad_n": 45}, {"sku": "2瓶装", "total": 1297, "real_rate": 78.6, "bad_n": 6}, {"sku": "双件装(面霜+洗面奶)", "total": 152, "real_rate": 76.5, "bad_n": 0}, {"sku": "3瓶装", "total": 144, "real_rate": 86.4, "bad_n": 0}, {"sku": "两件套(面霜+爽肤水)", "total": 90, "real_rate": 76.9, "bad_n": 1}], "promo": [{"name": "新升级60g", "value": 2871}, {"name": "第2瓶半价", "value": 1297}, {"name": "洁面套装", "value": 152}, {"name": "兄弟分享装", "value": 144}, {"name": "保湿加倍", "value": 90}, {"name": "逆袭帅哥", "value": 88}, {"name": "爆水滋润", "value": 56}, {"name": "日常必备", "value": 22}], "repurchase": {"count": 82, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "给这款男士面霜点个赞，这款质地真的超级清爽，抹开瞬间吸收，完全不会黏腻，肤感很舒服。控油效果也挺明显的，以前到中午就一脸油，现在能撑一天，脸还是干爽的。味道是淡淡的清香，不夸张，很适合男士。保湿力也够，用了之后皮肤滑溜了。整体非常满意，会回", "秋冬季节空气是越发干燥了，像我这样的旅行博主出门在外，选对一款好的保湿面霜就很有必要了!这款面霜是我回购最多的一款，不仅补水保湿非常在线，连修护力都是绝绝子，每次脸泛红拿它来急救，效果都立竿见影，现在出门行李箱里必有它!", "这款面霜质地轻盈，像酸奶般一抹即化，吸收快且不油腻，润而不油。保湿力持久，第二天肌肤仍水润饱满。泛红缓解，肤质更稳定健康。包装简约有质感。真心推荐给需要长效保湿、舒缓维稳的干皮、混干皮或敏感肌，是会无限回购的诚意之选！", "达人安利的这款男士面霜超级好用！有点贵、不过质地挺轻薄的，也好吸收不油腻，补水保湿和美白效果都很不错，我一个沙漠大干皮用完皮肤都水润水润的，真的很喜欢、用完会继续回购的~", "最近一直在用这款面霜，体验感拉满！质地像冰淇淋一样，推开后很快就吸收了，皮肤摸起来是哑光的，但不会拔干。用了一段时间，感觉皮肤状态稳定了不少，会无限回购！"], "trend": [{"month": "2025-09", "count": 3}, {"month": "2025-10", "count": 0}, {"month": "2025-11", "count": 12}, {"month": "2025-12", "count": 7}, {"month": "2026-01", "count": 10}, {"month": "2026-02", "count": 10}, {"month": "2026-03", "count": 7}, {"month": "2026-04", "count": 7}, {"month": "2026-05", "count": 2}, {"month": "2026-06", "count": 5}, {"month": "2026-07", "count": 8}, {"month": "2026-08", "count": 5}, {"month": "2026-09", "count": 6}]}, "portrait": {"scene": [{"name": "夏季清爽", "count": 496, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "在踩了那么多雷后，现在终于找到一款合适我的面霜了不得不说，这面霜保湿效果很明显，像我平时健完身后脸上总是干燥紧绷，但自从抹了它后，就算脸上出汗还是水润润的，真正做到了深层补水，并且抹上去吸收快，不油腻，运动起来无负担，虽然价格相对较高，但是"]}, {"name": "换季干燥", "count": 411, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "在踩了那么多雷后，现在终于找到一款合适我的面霜了不得不说，这面霜保湿效果很明显，像我平时健完身后脸上总是干燥紧绷，但自从抹了它后，就算脸上出汗还是水润润的，真正做到了深层补水，并且抹上去吸收快，不油腻，运动起来无负担，虽然价格相对较高，但是"]}, {"name": "男士自用", "count": 193, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "博主安利的这款男士面霜保湿补水效果实在是太好了，它是那种轻薄质地，用起来不油腻很舒服，上脸后吸收也很快，用完可以直接倒头就睡不怕沾枕头，就算熬夜了第二天起床皮肤也是水嫩水嫩的， 前两天朋友还问我咋天天往外跑脸上都不会干燥起皮呢hhh~就是价"]}, {"name": "油痘肌修护", "count": 133, "samples": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻"]}, {"name": "敏感肌维稳", "count": 115, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "这款男士面霜质地很轻薄，一抹就化开，上脸没有厚重闷肤的感觉，吸收很快，不会粘手粘枕头。淡淡的清香，不浓重。最近换季脸干起皮，坚持用几天干燥缓解不少，洗完脸涂一层，保湿维稳刚刚好。油皮用着也不会闷痘，男生护肤不用复杂，一瓶足够，性价比不错，推"]}, {"name": "学生党/平价", "count": 80, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "这款男士面霜质地很轻薄，一抹就化开，上脸没有厚重闷肤的感觉，吸收很快，不会粘手粘枕头。淡淡的清香，不浓重。最近换季脸干起皮，坚持用几天干燥缓解不少，洗完脸涂一层，保湿维稳刚刚好。油皮用着也不会闷痘，男生护肤不用复杂，一瓶足够，性价比不错，推"]}, {"name": "送男友/老公", "count": 43, "samples": ["这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "给男朋友入手的这款男士面霜真的很不错！质地清爽不油腻，很好推开吸收快。男生皮肤容易干燥粗糙，这款补水保湿效果到位，改善起皮紧绷，熬夜脸也能舒缓。不用复杂护肤，早晚简单涂一涂，用完皮肤细腻舒服，男生也会爱上护肤，很适合送男友。"]}, {"name": "送长辈/父母", "count": 6, "samples": ["不愧是魏老爸测评推荐的面霜，锁水保湿效果不错，上脸很轻薄，吸收速度比较快，现在使用了快半瓶，脸上的干纹细纹都淡了不少，脸也不泛红干痒了", "这款面霜真的很适合爸爸！质地滋润但不油腻，吸收快，用后皮肤明显柔软了。老爸说用着很舒服，味道也很清淡。性价比高，会回购！"]}], "focus": [{"name": "肤感敏感型", "count": 733, "rate": 48.1}, {"name": "效果导向型", "count": 645, "rate": 42.3}, {"name": "价格敏感型", "count": 323, "rate": 21.2}, {"name": "温和安全型", "count": 194, "rate": 12.7}, {"name": "物流服务型", "count": 95, "rate": 6.2}], "spec_type": [{"name": "尝鲜型(1瓶装)", "value": 2871}, {"name": "标准型(2瓶装)", "value": 1297}, {"name": "深度装(3瓶装及以上)", "value": 144}, {"name": "套装组合", "value": 409}]}, "wordcloud": {"good": [{"name": "面霜", "value": 700}, {"name": "保湿", "value": 593}, {"name": "效果", "value": 540}, {"name": "皮肤", "value": 466}, {"name": "吸收", "value": 388}, {"name": "质地", "value": 350}, {"name": "清爽", "value": 337}, {"name": "保湿效果", "value": 266}, {"name": "不油腻", "value": 248}, {"name": "水润", "value": 228}, {"name": "好用", "value": 228}, {"name": "补水", "value": 209}, {"name": "滋润", "value": 202}, {"name": "起皮", "value": 191}, {"name": "男士", "value": 171}, {"name": "推荐", "value": 134}, {"name": "控油", "value": 109}, {"name": "细腻", "value": 94}, {"name": "温和", "value": 90}, {"name": "味道", "value": 85}, {"name": "改善", "value": 66}, {"name": "干皮", "value": 66}, {"name": "换季", "value": 66}, {"name": "性价比", "value": 63}, {"name": "回购", "value": 60}, {"name": "坚持用", "value": 58}, {"name": "油皮", "value": 57}, {"name": "不干", "value": 57}, {"name": "秋冬", "value": 56}, {"name": "泛红", "value": 54}, {"name": "包装", "value": 52}, {"name": "好闻", "value": 50}, {"name": "不刺激", "value": 44}, {"name": "男朋友", "value": 39}, {"name": "修护", "value": 32}, {"name": "敏感肌", "value": 27}, {"name": "老公", "value": 27}, {"name": "B5", "value": 27}, {"name": "痘痘", "value": 23}, {"name": "物流", "value": 20}], "bad": [{"name": "刺激", "value": 14}, {"name": "没用", "value": 11}, {"name": "干", "value": 11}, {"name": "过敏", "value": 10}, {"name": "贵", "value": 8}, {"name": "闷", "value": 8}, {"name": "闷痘", "value": 7}, {"name": "油腻", "value": 5}, {"name": "垃圾", "value": 5}, {"name": "起皮", "value": 4}, {"name": "刺痛", "value": 2}, {"name": "退货", "value": 2}, {"name": "退款", "value": 2}, {"name": "泛红", "value": 2}, {"name": "厚重", "value": 1}, {"name": "痒", "value": 1}, {"name": "后悔", "value": 1}, {"name": "客服", "value": 1}]}, "len_dist": [{"name": "1-10字", "value": 212}, {"name": "11-20字", "value": 174}, {"name": "21-40字", "value": 319}, {"name": "40字以上", "value": 819}], "samples": {"good": ["坚持用下来，皮肤真的白了一个度，美白效果太惊喜了！ 泡沫细腻又丰富，上脸软乎乎的，洗完脸超干净，毛孔都被清洁得干干净净，摸起来滑溜溜的，一点都不假滑，洗完也完全不紧绷，脸蛋润润的，不干不痒，保湿滋养的感觉很明显。控油力也超棒，早上洗完脸，到", "很好用。Due to different in weather, Nantong is dryer than Singapore. This cream helps to moisturise my skin and my skin won", "这款男士面霜真的挖到宝了！男朋友用了一段时间，皮肤状态肉眼可见变好了。质地清爽不黏腻，抹上脸很快就吸收了，完全不泛油光，大油皮也能hold住。里面的维生素B5很安心，维稳效果超棒，他现在皮肤不怎么泛红起皮了，也不会再吐槽护肤麻烦，懒人也能轻", "在踩了那么多雷后，现在终于找到一款合适我的面霜了不得不说，这面霜保湿效果很明显，像我平时健完身后脸上总是干燥紧绷，但自从抹了它后，就算脸上出汗还是水润润的，真正做到了深层补水，并且抹上去吸收快，不油腻，运动起来无负担，虽然价格相对较高，但是", "博主安利的这款男士面霜保湿补水效果实在是太好了，它是那种轻薄质地，用起来不油腻很舒服，上脸后吸收也很快，用完可以直接倒头就睡不怕沾枕头，就算熬夜了第二天起床皮肤也是水嫩水嫩的， 前两天朋友还问我咋天天往外跑脸上都不会干燥起皮呢hhh~就是价", "刚收到货，塑料薄膜里面出现大量水渍一样的。请问这是什么产品质量？第一时间联系客服，客服让我打开包装，还好我没打开。客服说是快递的问题，可是快递运输中也不至于在包装里面啊。给我的解决方案补发一瓶，可是不需要。如实把收到货的情况放在评论区。请自"], "mid": ["前阵子换季，我这个油皮脸颊都觉得干，还有点泛红，后来女朋友就给我买了这款男士面霜，自从用这个后起皮现象都没了，包括前阵子脸颊泛红也慢慢褪了下去，现在这款面霜已经是我心目中的yyds了，谁用谁知道！", "这一瓶男士面霜有点东西啊，像我之前换季脸都会干痒起皮，自从用了它之后，脸一直是保持润润的状态，就算我平时出去跑业务脸都不带干的!就是价钱稍高点", "抱着试试看入手的男士面霜，肤感出乎预料。涂完不会糊一脸油，换季脸颊干痒能得到缓解，味道很低调，上班涂完不会黏枕头、沾口罩。", "我本身就是敏感肌，换季的时候还掉皮很严重，很多面霜都不适合我，它涂上脸润润的好吸收，用完脸上的干皮都被抚平啦！", "油敏肌肤彻底备征服了，这款男士面霜用下来，就连皮肤出油都正常了，现在就是出门晒晒太阳，皮肤也不会泛红敏感了，", "男孩子也要保护好自己的脸蛋儿，这款男士双抗面霜淡淡香不腻，一抹就化开～有点小贵，但是没有一点.副作用，很值"], "bad": ["面霜很水，但是用了就过敏，直接肿了，因为开的原装加上距离快递处太远，和商家商量退款，先是不等买家说完要求就直接拒绝，然后是给各种理由，然后又开始答应了退部分又反悔！是买家不需要时间去点击相应的按键吗？是买家不能有一点点时间耽误，不能处理过敏", "这款男士面霜质地很轻薄，一抹就化开，上脸没有厚重闷肤的感觉，吸收很快，不会粘手粘枕头。淡淡的清香，不浓重。最近换季脸干起皮，坚持用几天干燥缓解不少，洗完脸涂一层，保湿维稳刚刚好。油皮用着也不会闷痘，男生护肤不用复杂，一瓶足够，性价比不错，推", "质地像融化的奶冻，上脸一抹就吸收，完全不黏腻也不闷痘，秋冬涂完第二天皮肤还是水润润的，换季敏感期也没泛红刺痛。坚持用下来，脸蛋摸起来又软又嫩，暗沉黄气都淡了，素颜也透着自然光泽，成分温和无负担，干皮油皮都适配", "这面霜真是相见恨晚啊，用起来很温和，我敏感肌也不觉得刺激，而且质地很丝滑好吸收，一抹到脸上就化开了，一点都不黏腻。现在换季的时候用，保湿效果也特别好，女朋友还说味道很好闻，小贵但真好用", "经常熬夜打游戏，时间久了皮肤暗沉了好多，实在是看不下去就入手了这面霜，到了之后我用了半个月，直接跟黄脸说拜拜了，现在白了之后看着也帅气了不少，价格有点贵也值了", "用过很多男士面霜，这款在保湿舒缓方面表现特别突出。上脸温和亲肤，没有香精酒精的刺激感，滋润度刚刚好，干皮够用、油皮也不闷。坚持使用能明显改善皮肤粗糙干燥的问题"]}};
+const COLOR = { good: '#22c55e', mid: '#f59e0b', bad: '#ef4444', template: '#cbd5e1', primary: '#6d5ef7', purple: '#a855f7' };
+const charts = {};
+const rendered = {};
+
+/* ---------- 工具 ---------- */
+function $(id) { return document.getElementById(id); }
+function renderChart(id, option) {
+  if (!rendered[id]) { charts[id] = echarts.init($(id)); rendered[id] = true; }
+  charts[id].setOption(option);
+}
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+/* ---------- Tab 切换：首次显示才渲染，之后 resize ---------- */
+function switchPage(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  $('page-' + name).classList.add('active');
+  const page = $('page-' + name);
+  page.querySelectorAll('[data-chart]').forEach(c => renderChart(c.id, OPTIONS[c.id]()));
+  // 只 resize 当前页可见图表（隐藏页容器宽度为0，resize 会把 canvas 压扁成 125px，切勿全局 resize）
+  page.querySelectorAll('[data-chart]').forEach(c => charts[c.id] && charts[c.id].resize());
+}
+
+/* ---------- 各图表配置 ---------- */
+const OPTIONS = {};
+
+/* ============ 页1 总览 ============ */
+OPTIONS['ov-pie'] = function () {
+  const pie = DATA.sentiment_pie;
+  return {
+    color: [COLOR.good, COLOR.mid, COLOR.bad, COLOR.template],
+    tooltip: { trigger: 'item', formatter: p => p.name + '：' + p.value + ' 条（' + p.percent + '%）' },
+    legend: { bottom: 0, textStyle: { fontSize: 12 } },
+    series: [{
+      type: 'pie', radius: ['42%', '68%'], center: ['50%', '44%'],
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { formatter: '{b}\n{d}%', fontSize: 11 },
+      data: pie
+    }]
+  };
+};
+OPTIONS['ov-trend'] = function () {
+  const m = DATA.monthly;
+  const months = m.map(x => x.month.slice(0, 7));
+  return {
+    color: [COLOR.primary, COLOR.purple],
+    tooltip: { trigger: 'axis' },
+    legend: { top: 0, data: ['评论数', '真实好评率'] },
+    grid: { left: 50, right: 50, top: 36, bottom: 28 },
+    xAxis: { type: 'category', data: months, axisLabel: { fontSize: 10, interval: 2 } },
+    yAxis: [
+      { type: 'value', name: '条数', axisLabel: { fontSize: 10 } },
+      { type: 'value', name: '好评率%', min: 80, max: 102, axisLabel: { fontSize: 10 }, splitLine: { show: false } }
+    ],
+    series: [
+      { name: '评论数', type: 'bar', data: m.map(x => x.count), barWidth: '55%',
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: '#8b5cf6' }, { offset: 1, color: '#c4b5fd' }] } } },
+      { name: '真实好评率', type: 'line', yAxisIndex: 1, data: m.map(x => x.real_rate),
+        smooth: true, symbolSize: 5, lineStyle: { width: 2.5 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: 'rgba(109,94,247,.25)' }, { offset: 1, color: 'rgba(109,94,247,.02)' }] } } }
+    ]
+  };
+};
+OPTIONS['ov-good-theme'] = function () {
+  const t = DATA.good_themes.slice(0, 8).slice().reverse();
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 70, right: 30, top: 10, bottom: 24 },
+    xAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'category', data: t.map(x => x.theme), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: 'bar', data: t.map(x => x.count), barWidth: '58%',
+      label: { show: true, position: 'right', fontSize: 11 },
+      itemStyle: { borderRadius: [0, 6, 6, 0], color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+        colorStops: [{ offset: 0, color: '#6d5ef7' }, { offset: 1, color: '#a855f7' }] } }
+    }]
+  };
+};
+OPTIONS['ov-bad-reason'] = function () {
+  const t = DATA.bad_reasons.slice(0, 7).slice().reverse();
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 70, right: 30, top: 10, bottom: 24 },
+    xAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'category', data: t.map(x => x.reason), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: 'bar', data: t.map(x => x.count), barWidth: '58%',
+      label: { show: true, position: 'right', fontSize: 11 },
+      itemStyle: { borderRadius: [0, 6, 6, 0], color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+        colorStops: [{ offset: 0, color: '#f59e0b' }, { offset: 1, color: '#ef4444' }] } }
+    }]
+  };
+};
+
+/* ============ 页2 情感分析 ============ */
+OPTIONS['sn-wc-good'] = function () {
+  return {
+    tooltip: { formatter: p => p.name + '：' + p.value + ' 次' },
+    series: [{
+      type: 'wordCloud', shape: 'circle', width: '96%', height: '92%',
+      sizeRange: [14, 64], rotationRange: [0, 0], gridSize: 6,
+      drawOutOfBound: false, textStyle: { fontWeight: 600 },
+      emphasis: { textStyle: { color: '#6d5ef7' } },
+      data: DATA.wordcloud.good
+    }]
+  };
+};
+OPTIONS['sn-wc-bad'] = function () {
+  return {
+    tooltip: { formatter: p => p.name + '：' + p.value + ' 次' },
+    series: [{
+      type: 'wordCloud', shape: 'circle', width: '96%', height: '92%',
+      sizeRange: [14, 56], rotationRange: [0, 0], gridSize: 6,
+      drawOutOfBound: false, textStyle: { fontWeight: 600, color: '#ef4444' },
+      emphasis: { textStyle: { color: '#7f1d1d' } },
+      data: DATA.wordcloud.bad
+    }]
+  };
+};
+
+/* ============ 页3 商品维度 ============ */
+OPTIONS['sku-dist'] = function () {
+  const d = DATA.sku_dist;
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 60, right: 30, top: 10, bottom: 24 },
+    xAxis: { type: 'category', data: d.map(x => x.name), axisLabel: { fontSize: 12 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    series: [{
+      type: 'bar', data: d.map(x => x.value), barWidth: '50%',
+      label: { show: true, position: 'top', fontSize: 11 },
+      itemStyle: { borderRadius: [6, 6, 0, 0], color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: '#6d5ef7' }, { offset: 1, color: '#a78bfa' }] } }
+    }]
+  };
+};
+OPTIONS['sku-heat'] = function () {
+  const h = DATA.sku_heat;
+  const maxV = Math.max(...h.matrix.flat());
+  return {
+    tooltip: { formatter: p => h.skus[p.value[0]] + ' × ' + h.types[p.value[1]] + '：' + p.value[2] + ' 条' },
+    grid: { left: 90, right: 30, top: 30, bottom: 50 },
+    xAxis: { type: 'category', data: h.skus, splitArea: { show: true }, axisLabel: { fontSize: 12 } },
+    yAxis: { type: 'category', data: h.types, splitArea: { show: true }, axisLabel: { fontSize: 12 } },
+    visualMap: {
+      min: 0, max: maxV, calculable: false, orient: 'horizontal', left: 'center', bottom: 4,
+      inRange: { color: ['#ede9fe', '#a78bfa', '#6d5ef7', '#4338ca'] }, textStyle: { fontSize: 10 }
+    },
+    series: [{
+      type: 'heatmap', data: h.matrix.flatMap((row, i) => row.map((v, j) => [i, j, v])),
+      label: { show: true, fontSize: 10 }, itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 4 },
+      emphasis: { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,.2)' } }
+    }]
+  };
+};
+OPTIONS['sku-promo'] = function () {
+  const d = DATA.promo.slice(0, 8).slice().reverse();
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 90, right: 30, top: 10, bottom: 24 },
+    xAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'category', data: d.map(x => x.name), axisLabel: { fontSize: 11 } },
+    series: [{
+      type: 'bar', data: d.map(x => x.value), barWidth: '58%',
+      label: { show: true, position: 'right', fontSize: 11 },
+      itemStyle: { borderRadius: [0, 6, 6, 0], color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+        colorStops: [{ offset: 0, color: '#8b5cf6' }, { offset: 1, color: '#38bdf8' }] } }
+    }]
+  };
+};
+
+/* ============ 页4 时间维度 ============ */
+OPTIONS['tm-stack'] = function () {
+  const m = DATA.monthly;
+  const months = m.map(x => x.month.slice(0, 7));
+  return {
+    color: [COLOR.template, COLOR.good, COLOR.mid, COLOR.bad],
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { top: 0, data: ['模板好评', '真实好评', '中评', '差评'] },
+    grid: { left: 50, right: 20, top: 36, bottom: 28 },
+    xAxis: { type: 'category', data: months, axisLabel: { fontSize: 10, interval: 2 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    series: [
+      { name: '模板好评', type: 'bar', stack: 't', data: m.map(x => x.template), itemStyle: { color: '#cbd5e1' } },
+      { name: '真实好评', type: 'bar', stack: 't', data: m.map(x => x.good), itemStyle: { color: '#22c55e' } },
+      { name: '中评', type: 'bar', stack: 't', data: m.map(x => x.mid), itemStyle: { color: '#f59e0b' } },
+      { name: '差评', type: 'bar', stack: 't', data: m.map(x => x.bad), itemStyle: { color: '#ef4444' } }
+    ]
+  };
+};
+OPTIONS['tm-rate'] = function () {
+  const m = DATA.monthly;
+  const months = m.map(x => x.month.slice(0, 7));
+  const rates = m.map(x => x.real_rate);
+  const avg = rates.filter(r => r != null).reduce((a, b) => a + b, 0) / rates.filter(r => r != null).length;
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '<br/>真实好评率：' + (p[0].value ?? '-') + '%' },
+    grid: { left: 50, right: 20, top: 30, bottom: 28 },
+    xAxis: { type: 'category', data: months, axisLabel: { fontSize: 10, interval: 2 } },
+    yAxis: { type: 'value', min: 85, max: 102, axisLabel: { fontSize: 10, formatter: '{value}%' } },
+    series: [{
+      type: 'line', data: rates, smooth: true, symbolSize: 6,
+      lineStyle: { width: 2.5, color: '#6d5ef7' }, itemStyle: { color: '#6d5ef7' },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: 'rgba(109,94,247,.3)' }, { offset: 1, color: 'rgba(109,94,247,.03)' }] } },
+      markLine: { data: [{ yAxis: avg, name: '两年平均' }], lineStyle: { color: '#a855f7', type: 'dashed' },
+        label: { formatter: '平均 ' + avg.toFixed(1) + '%', fontSize: 10 } }
+    }]
+  };
+};
+OPTIONS['tm-weekday'] = function () {
+  const d = DATA.weekday;
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 45, right: 20, top: 30, bottom: 24 },
+    xAxis: { type: 'category', data: d.map(x => x.name), axisLabel: { fontSize: 12 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    series: [{
+      type: 'bar', data: d.map(x => x.value), barWidth: '50%',
+      itemStyle: { borderRadius: [6, 6, 0, 0], color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: '#8b5cf6' }, { offset: 1, color: '#c4b5fd' }] } }
+    }]
+  };
+};
+OPTIONS['tm-rep'] = function () {
+  const m = DATA.repurchase.trend;
+  const months = m.map(x => x.month.slice(0, 7));
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 45, right: 20, top: 30, bottom: 28 },
+    xAxis: { type: 'category', data: months, axisLabel: { fontSize: 10, interval: 2 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    series: [{
+      type: 'bar', data: m.map(x => x.count), barWidth: '55%',
+      itemStyle: { borderRadius: [6, 6, 0, 0], color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: '#6d5ef7' }, { offset: 1, color: '#a78bfa' }] } }
+    }]
+  };
+};
+
+/* ============ 页5 用户画像 ============ */
+OPTIONS['pt-spec'] = function () {
+  const d = DATA.portrait.spec_type;
+  return {
+    color: ['#6d5ef7', '#a855f7', '#38bdf8'],
+    tooltip: { trigger: 'item', formatter: p => p.name + '：' + p.value + ' 条（' + p.percent + '%）' },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    series: [{
+      type: 'pie', radius: ['40%', '66%'], center: ['50%', '44%'],
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { formatter: '{b}\n{d}%', fontSize: 11 }, data: d
+    }]
+  };
+};
+OPTIONS['pt-scene'] = function () {
+  const d = DATA.portrait.scene.slice().reverse();
+  return {
+    tooltip: { trigger: 'axis', formatter: p => p[0].name + '：' + p[0].value + ' 条' },
+    grid: { left: 80, right: 30, top: 10, bottom: 24 },
+    xAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'category', data: d.map(x => x.name), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: 'bar', data: d.map(x => x.count), barWidth: '52%',
+      label: { show: true, position: 'right', fontSize: 11 },
+      itemStyle: { borderRadius: [0, 6, 6, 0], color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+        colorStops: [{ offset: 0, color: '#6d5ef7' }, { offset: 1, color: '#38bdf8' }] } }
+    }]
+  };
+};
+OPTIONS['pt-focus'] = function () {
+  const d = DATA.portrait.focus;
+  return {
+    color: ['#6d5ef7', '#a855f7', '#38bdf8', '#22c55e'],
+    tooltip: { trigger: 'item', formatter: p => p.name + '：' + p.value + ' 条（' + p.percent + '%）' },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    series: [{
+      type: 'pie', radius: ['38%', '64%'], center: ['50%', '44%'],
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { formatter: '{b}\n{d}%', fontSize: 10.5 },
+      // 注意：饼图 data 需要 {name, value}，portrait.focus 字段是 count，需转换
+      data: d.map(x => ({ name: x.name, value: x.count }))
+    }]
+  };
+};
+
+/* ---------- 表格渲染 ---------- */
+function renderGoodTable() {
+  const rows = DATA.good_themes.map(t => `
+    <tr><td><b>${t.theme}</b></td><td>${t.count} 条</td><td>${t.rate}%</td>
+    <td class="sample">${esc(trunc(t.samples[0] || '—', 60))}</td></tr>`).join('');
+  $('sn-good-table').innerHTML = `<table class="ov-table">
+    <tr><th>好评点</th><th>命中数</th><th>命中率</th><th>代表评论</th></tr>${rows}</table>`;
+}
+function renderBadTable() {
+  const rows = DATA.bad_reasons.map(t => `
+    <tr><td><b>${t.reason}</b></td><td>${t.count} 条</td><td>${t.rate}%</td>
+    <td class="sample">${esc(trunc(t.samples[0] || '—', 60))}</td></tr>`).join('');
+  $('sn-bad-table').innerHTML = `<table class="ov-table">
+    <tr><th>差评点</th><th>命中数</th><th>占比</th><th>代表评论</th></tr>${rows}</table>`;
+}
+function renderSkuRateTable() {
+  const rows = DATA.sku_rate.map(s => `
+    <tr><td><b>${s.sku}</b></td><td>${s.total} 条</td>
+    <td>${s.real_rate}%</td><td>${s.bad_n > 0 ? '<span class="badge bad">' + s.bad_n + ' 条</span>' : '<span class="badge good">0</span>'}</td></tr>`).join('');
+  $('sku-rate-table').innerHTML = `<table class="ov-table">
+    <tr><th>规格</th><th>评论数</th><th>真实好评率</th><th>差评数</th></tr>${rows}</table>`;
+}
+function renderCooccur() {
+  const items = DATA.cooccur.length
+    ? DATA.cooccur.map(c => `<div class="review-item">⚡ <span class="badge info">${c.good}</span> 与 <span class="badge bad">${c.bad}</span> 同现 <b>${c.count}</b> 次 —— 体验中的"加分项 + 扣分项"组合</div>`).join('')
+    : '<div class="empty-hint">负面评论中暂无明显矛盾组合</div>';
+  $('sn-cooccur').innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">${items}</div>`;
+}
+function renderSceneSamples() {
+  const cards = DATA.portrait.scene.map(s => `
+    <div class="review-item"><div class="meta"><span class="badge info">${s.name}</span> 共 ${s.count} 条</div>
+    ${esc(trunc(s.samples[0] || '—', 70))}</div>`).join('');
+  $('pt-scene-samples').innerHTML = `<div class="review-list">${cards}</div>`;
+}
+function renderRepSamples() {
+  const items = DATA.repurchase.samples.map(t => `<div class="review-item">🔁 ${esc(trunc(t, 70))}</div>`).join('');
+  $('pt-rep-samples').innerHTML = `<div class="review-list">${items}</div>`;
+}
+
+/* ---------- 洞察文本 ---------- */
+function renderInsights() {
+  const k = DATA.kpi;
+  const gt = DATA.good_themes[0];
+  const br = DATA.bad_reasons[0];
+  const skuBest = DATA.sku_rate.slice().sort((a, b) => b.real_rate - a.real_rate)[0];
+  const skuWorst = DATA.sku_rate.slice().sort((a, b) => a.real_rate - b.real_rate)[0];
+  const sceneTop = DATA.portrait.scene[0];
+  $('ov-insights').innerHTML = `<strong>核心结论：</strong>
+   ① 产品口碑扎实：真实好评率 <strong>${k.real_good_rate}%</strong>（${k.good} 条真实好评 / ${k.real_total} 条有内容评论）；
+   ② 口碑主要由「<strong>${gt.theme}</strong>」驱动（命中 ${gt.count} 条），买家最看重效果与正品保障；
+   ③ 需警惕点：中差评合计 ${k.mid + k.bad} 条，首要问题是「<strong>${br.reason}</strong>」（${br.count} 条）；
+   ④ 规格维度：<strong>${skuBest.sku}</strong> 真实好评率最高（${skuBest.real_rate}%），<strong>${skuWorst.sku}</strong> 相对最低（${skuWorst.real_rate}%，差评 ${skuWorst.bad_n} 条）；
+   ⑤ 典型购买动机是「<strong>${sceneTop.name}</strong>」（${sceneTop.count} 条提及），购买决策与关节健康需求强相关。`;
+  $('tm-insights').innerHTML = `<strong>时间维度洞察：</strong>
+   ① 评论量呈现明显的大促脉冲：<strong>2026-06（618）</strong>单月 338 条为峰值，其次 2026-05 / 2026-03；
+   ② 真实好评率两年均值稳定在 <strong>${k.real_good_rate}%</strong> 上下，未出现口碑恶化拐点；
+   ③ 差评在 <strong>2025-11、2025-09、2026-03、2026-08</strong> 有零星出现，量级小且不连续，暂无批次性质量问题信号；
+   ④ 评价活跃度周一最高、周末次之，与"收货后即评"习惯吻合。`;
+  const specPct = (v) => Math.round(v / DATA.kpi.total * 100);
+  $('pt-insights').innerHTML = `<strong>用户画像总结：</strong>
+   ① 规格偏好：<strong>标准疗程型（2-3盒）</strong>占比最高（${specPct(2394)}%），其次尝鲜型 1盒（${specPct(1626)}%）——购买决策偏向"先试后囤"；
+   ② 购买场景：<strong>${sceneTop.name}</strong> 是最大动机（${sceneTop.count} 条提及，占真实评论 ${Math.round(sceneTop.count / DATA.kpi.real_total * 100)}%），人群画像偏向中老年关节不适人群及其子女；
+   ③ 关注点：<strong>${DATA.portrait.focus[0].name}</strong> 为主（${DATA.portrait.focus[0].count} 条），价格敏感型次之——投放与详情页应主攻"效果"，次打"性价比"；
+   ④ 复购信号 ${k.repurchase} 条（占真实评论 ${Math.round(k.repurchase / k.real_total * 100)}%），存在稳定回头客，值得做会员/周期购运营。`;
+}
+
+/* ---------- KPI 填充 ---------- */
+function fillKpi() {
+  const k = DATA.kpi;
+  $('kpi-total').textContent = k.total;
+  $('kpi-good-rate').textContent = k.real_good_rate;
+  $('kpi-tpl').textContent = k.template;
+  $('kpi-tpl-rate').textContent = k.template_rate + '%';
+  $('kpi-mid').textContent = k.mid;
+  $('kpi-bad').textContent = k.bad;
+  $('kpi-rep').textContent = k.repurchase;
+  $('sku-k-spec').textContent = DATA.sku_dist.length;
+  $('sku-k-top').textContent = DATA.sku_dist[0].name;
+  const best = DATA.sku_rate.slice().sort((a, b) => b.real_rate - a.real_rate)[0];
+  const worst = DATA.sku_rate.slice().sort((a, b) => a.real_rate - b.real_rate)[0];
+  $('sku-k-best').textContent = best.sku + '（' + best.real_rate + '%）';
+  $('sku-k-worst').textContent = worst.sku + '（差评 ' + worst.bad_n + ' 条）';
+}
+
+/* ---------- 启动 ---------- */
+fillKpi();
+renderGoodTable(); renderBadTable(); renderSkuRateTable(); renderCooccur();
+renderSceneSamples(); renderRepSamples(); renderInsights();
+// 首次渲染当前页（总览）图表
+document.querySelectorAll('#page-overview [data-chart]').forEach(c => renderChart(c.id, OPTIONS[c.id]()));
+</script>
+</body>
+</html>
